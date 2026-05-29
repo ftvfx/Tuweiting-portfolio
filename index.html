@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tu Wei Ting — VFX Supervisor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #0d0d0d;
+      --bg2:    #141414;
+      --bg3:    #1c1c1c;
+      --accent: #e94560;
+      --white:  #f0f0f0;
+      --mid:    #aaaaaa;
+      --light:  #555555;
+      --font:   'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--white); font-family: var(--font); font-size: 15px; line-height: 1.6; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 48px;
+      background: linear-gradient(to bottom, rgba(13,13,13,0.96), transparent);
+      transition: background 0.3s;
+    }
+    nav.scrolled { background: rgba(13,13,13,0.97); }
+    .nav-logo { font-size: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.4; }
+    .nav-logo-sub { font-size: 10px; font-weight: 400; letter-spacing: 0.1em; color: var(--mid); }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 36px; }
+    .nav-links a { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mid); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--white); }
+
+    /* ── Hero ── */
+    #hero {
+      min-height: 100vh; display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 80px 0 40px;
+    }
+
+    /* ── Coverflow Carousel ── */
+    .cf-outer {
+      width: 100vw;
+      margin-left: calc(-50vw + 50%);
+      position: relative;
+      padding: 40px 0 20px;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+    .cf-outer.dragging { cursor: grabbing; }
+
+    .cf-track {
+      position: relative;
+      /* Pre-calculated: cardWidth = 56vw, height = 56vw * 9/16 + 80px */
+      height: calc(31.5vw + 80px);
+    }
+
+    .cf-card {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      aspect-ratio: 16/9;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #111;
+      transform-origin: center center;
+      transition: transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94),
+                  opacity  0.45s ease,
+                  filter   0.45s ease,
+                  box-shadow 0.45s ease;
+      will-change: transform, opacity, filter;
+    }
+
+    /* Thumbnail layer */
+    .cf-thumb {
+      position: absolute; inset: 0;
+      cursor: pointer;
+    }
+    .cf-thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: filter 0.3s;
+    }
+    .cf-thumb-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 50%, transparent 100%);
+    }
+    .cf-thumb-info {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 20px 24px;
+      text-align: left;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .cf-card.cf-active .cf-thumb-info { opacity: 1; transform: translateY(0); }
+    .cf-thumb-label { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+    .cf-thumb-title { font-size: 17px; font-weight: 700; color: #fff; line-height: 1.25; }
+    .cf-thumb-sub   { font-size: 11px; color: var(--mid); margin-top: 3px; }
+
+    /* Play button — only on active card */
+    .cf-play {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.75);
+      width: 72px; height: 72px; border-radius: 50%;
+
+      /* 磨砂玻璃 */
+      background: rgba(20, 20, 20, 0.35);
+      backdrop-filter: blur(12px) saturate(1.4);
+      -webkit-backdrop-filter: blur(12px) saturate(1.4);
+
+      /* 紅色圓框 */
+      border: 2px solid rgba(233, 69, 96, 0.85);
+      box-shadow: 0 0 0 1px rgba(233,69,96,0.2),
+                  inset 0 1px 0 rgba(255,255,255,0.08);
+
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.35s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1),
+                  border-color 0.2s, box-shadow 0.2s;
+      pointer-events: none;
+      cursor: pointer;
+    }
+    .cf-play svg {
+      width: 22px; height: 22px; fill: #fff;
+      margin-left: 3px; /* optical center for triangle */
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+    }
+    .cf-card.cf-active .cf-play {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto;
+    }
+    .cf-card.cf-active .cf-thumb:hover .cf-play {
+      border-color: rgba(233,69,96,1);
+      box-shadow: 0 0 0 4px rgba(233,69,96,0.18),
+                  inset 0 1px 0 rgba(255,255,255,0.1);
+      transform: translate(-50%, -50%) scale(1.08);
+    }
+
+    /* Iframe */
+    .cf-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; display: none; }
+    .cf-iframe.playing { display: block; }
+
+    /* Arrows */
+    .cf-arrow {
+      position: absolute; top: 50%; z-index: 20;
+      transform: translateY(-50%);
+      width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+      backdrop-filter: blur(6px);
+    }
+    .cf-arrow:hover { background: var(--accent); border-color: var(--accent); }
+    .cf-arrow svg { width: 18px; height: 18px; fill: #fff; }
+    .cf-prev { left: 24px; }
+    .cf-next { right: 24px; }
+
+    /* Dots */
+    .cf-dots { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+    .cf-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--light); cursor: pointer;
+      transition: background 0.25s, transform 0.25s;
+    }
+    .cf-dot.active { background: var(--accent); transform: scale(1.5); }
+
+    /* ── Section base ── */
+    section { padding: 96px 48px; }
+    .section-header { display: flex; align-items: center; gap: 20px; margin-bottom: 52px; }
+    .section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+    .section-rule { flex: 1; height: 1px; background: var(--bg3); }
+
+    /* ── Past Projects — 3:4 poster grid ── */
+    #projects { background: var(--bg); }
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+    }
+    .poster-card {
+      position: relative;
+      aspect-ratio: 3/4;
+      overflow: hidden;
+      background: var(--bg3);
+    }
+    .poster-card img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+      filter: brightness(0.8);
+      transition: transform 0.5s ease, filter 0.5s ease;
+    }
+    .poster-card:hover img {
+      transform: scale(1.06);
+      filter: brightness(0.55);
+    }
+    /* Placeholder */
+    .poster-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 8px;
+      padding: 20px; text-align: center;
+    }
+    .ph-soon { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+    .ph-title { font-size: 13px; font-weight: 600; color: var(--white); line-height: 1.3; }
+    .ph-zh { font-size: 11px; color: var(--light); margin-top: 2px; }
+    .ph-meta { font-size: 10px; color: var(--light); margin-top: 6px; letter-spacing: 0.05em; }
+
+    /* Overlay */
+    .poster-overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 18px;
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 55%);
+      opacity: 0; transition: opacity 0.35s;
+    }
+    .poster-card:hover .poster-overlay { opacity: 1; }
+    .poster-overlay.center-badge { justify-content: center; align-items: center; }
+
+    .p-badge {
+      display: inline-block; font-size: 8px; font-weight: 700;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      padding: 3px 7px; border-radius: 2px; margin-bottom: 6px;
+      align-self: flex-start;
+    }
+    .poster-placeholder .p-badge { align-self: center; opacity: 0; transition: opacity 0.35s; }
+    .poster-card:hover .poster-placeholder .p-badge { opacity: 1; }
+    .p-badge.netflix  { background: #e50914; color: #fff; }
+    .p-badge.sg       { background: #2563eb; color: #fff; }
+    .p-badge.upcoming { background: #333; color: var(--mid); }
+
+    .badge-corner {
+      position: absolute; top: 10px; right: 10px;
+      z-index: 3; pointer-events: none;
+    }
+    .badge-corner .p-badge { margin-bottom: 0; }
+
+    .p-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+    .p-zh    { font-size: 11px; color: var(--mid); font-weight: 300; }
+    .p-meta  { font-size: 10px; color: var(--mid); margin-top: 5px; letter-spacing: 0.04em; }
+
+    /* ── About ── */
+    #about { background: var(--bg2); }
+    .about-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 72px; align-items: start; }
+    .about-bio p { font-size: 15px; color: var(--mid); line-height: 1.9; margin-bottom: 18px; }
+    .about-bio p:last-child { margin-bottom: 0; }
+    .about-bio strong { color: var(--white); font-weight: 600; }
+    .about-bio em { color: var(--accent); font-style: normal; }
+
+    .skills-block { display: flex; flex-direction: column; gap: 0; }
+    .skill-row {
+      display: flex; gap: 0; align-items: baseline;
+      padding: 12px 0; border-bottom: 1px solid var(--bg3);
+    }
+    .skill-row:first-child { border-top: 1px solid var(--bg3); }
+    .skill-cat { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); min-width: 120px; flex-shrink: 0; }
+    .skill-val { font-size: 12.5px; color: var(--mid); line-height: 1.6; }
+
+    /* ── Awards ── */
+    #awards { background: var(--bg); }
+    .awards-list { display: flex; flex-direction: column; gap: 0; }
+    .award-row {
+      display: grid; grid-template-columns: 60px 1fr auto;
+      gap: 24px; align-items: baseline;
+      padding: 16px 0; border-bottom: 1px solid var(--bg3);
+    }
+    .award-row:first-child { border-top: 1px solid var(--bg3); }
+    .award-year { font-size: 12px; color: var(--light); font-weight: 500; }
+    .award-body { }
+    .award-name { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 3px; }
+    .award-detail { font-size: 12px; color: var(--mid); }
+    .award-film { font-size: 12px; color: var(--mid); font-style: italic; }
+    .award-status {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 2px; white-space: nowrap; align-self: center;
+    }
+    .award-status.win  { background: var(--accent); color: #fff; }
+    .award-status.nom  { border: 1px solid var(--light); color: var(--light); }
+
+
+    /* ── Contact ── */
+    #contact { background: var(--bg); text-align: center; padding: 96px 24px; }
+    .contact-label { font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); margin-bottom: 24px; }
+    .contact-email { font-size: clamp(22px, 4vw, 42px); font-weight: 700; color: var(--white); transition: color 0.2s; }
+    .contact-email:hover { color: var(--accent); }
+    .contact-sub { margin-top: 14px; font-size: 13px; color: var(--light); }
+
+    /* ── Footer ── */
+    footer { border-top: 1px solid var(--bg3); padding: 24px 48px; display: flex; justify-content: space-between; }
+    footer p { font-size: 11px; color: var(--light); }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) { .projects-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 768px)  {
+      nav { padding: 16px 24px; }
+      section { padding: 64px 24px; }
+      .projects-grid { grid-template-columns: repeat(3, 1fr); }
+      .about-grid { grid-template-columns: 1fr; gap: 40px; }
+      .award-row { grid-template-columns: 50px 1fr; }
+      .award-status { display: none; }
+    }
+    @media (max-width: 480px) {
+      .projects-grid { grid-template-columns: repeat(2, 1fr); }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav id="navbar">
+  <div class="nav-logo">Tu Wei Ting<br><span class="nav-logo-sub">VFX Supervisor / VFX Producer</span></div>
+  <div class="nav-links">
+    <a href="#hero">Reel</a>
+    <a href="#projects">Projects</a>
+    <a href="#about">About</a>
+    <a href="#awards">Awards</a>
+    <a href="#contact">Contact</a>
+  </div>
+</nav>
+
+<!-- ── Hero / Coverflow ── -->
+<section id="hero">
+  <div class="cf-outer" id="reel">
+    <div class="cf-track" id="cfTrack"></div>
+    <button class="cf-arrow cf-prev" id="cfPrev" aria-label="Previous">
+      <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+    </button>
+    <button class="cf-arrow cf-next" id="cfNext" aria-label="Next">
+      <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+    </button>
+  </div>
+  <div class="cf-dots" id="cfDots"></div>
+</section>
+
+<!-- ── Past Projects ── -->
+<section id="projects">
+  <div class="section-header">
+    <span class="section-title">Past Projects</span>
+    <div class="section-rule"></div>
+  </div>
+  <div class="projects-grid">
+
+    <!-- Netflix -->
+    <div class="poster-card">
+      <!-- 2027 Coming Soon -->
+      <div class="poster-placeholder">
+        <p class="ph-soon">In Post-Production · 2027</p>
+        <p class="ph-title">The Miracle of ER</p>
+        <p class="ph-zh">急診室的奇蹟</p>
+        <p class="ph-meta">TV Series · VFX Supervisor</p>
+        <span class="p-badge upcoming" style="margin-top:10px;">Upcoming</span>
+      </div>
+      <div class="badge-corner"><span class="p-badge netflix">Netflix Original</span></div>
+      <div class="poster-overlay"></div>
+    </div>
+
+    <div class="poster-card">
+      <!-- 2027 Coming Soon - Singapore -->
+      <div class="poster-placeholder">
+        <p class="ph-soon">In Post-Production · 2027</p>
+        <p class="ph-title">See You at 11PM</p>
+        <p class="ph-zh">夜半11點學校見</p>
+        <p class="ph-meta">TV Series · VFX Supervisor</p>
+        <span class="p-badge upcoming" style="margin-top:10px;">Upcoming</span>
+      </div>
+      <div class="badge-corner"><span class="p-badge sg">Singapore Production</span></div>
+      <div class="poster-overlay"></div>
+    </div>
+
+    <div class="poster-card">
+      <!-- 2026 Coming Soon -->
+      <div class="poster-placeholder">
+        <p class="ph-soon">In Production · 2026</p>
+        <p class="ph-title">The Vanishing Rift</p>
+        <p class="ph-zh">消失的裂痕</p>
+        <p class="ph-meta">TV Series · VFX Supervisor</p>
+        <span class="p-badge upcoming" style="margin-top:10px;">Upcoming</span>
+      </div>
+      <div class="poster-overlay"></div>
+    </div>
+
+    <!-- 2025 -->
+    <div class="poster-card">
+      <img src="images/marching-boys.jpg" alt="Marching Boys"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Marching Boys</p>
+        <p class="p-zh">進行曲</p>
+        <p class="p-meta">2025 · Feature Film · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/outlaw-doctor.jpg" alt="The Outlaw Doctor"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">The Outlaw Doctor</p>
+        <p class="p-zh">化外之醫</p>
+        <p class="p-meta">2025 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/the-uniform.jpg" alt="The Uniform"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">The Uniform</p>
+        <p class="p-zh">夜校女生</p>
+        <p class="p-meta">2025 · Feature Film · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <!-- 2024 -->
+    <div class="poster-card">
+      <img src="images/q18.jpg" alt="Q18"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Q18</p>
+        <p class="p-zh">Q18</p>
+        <p class="p-meta">2024 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <!-- 2023 -->
+    <div class="poster-card">
+      <img src="images/copycat-killer.jpg" alt="The Copycat Killer"
+           onerror="this.style.display='none'">
+      <div class="badge-corner"><span class="p-badge netflix">Netflix Original</span></div>
+      <div class="poster-overlay">
+        <p class="p-title">The Copycat Killer</p>
+        <p class="p-zh">模倣犯</p>
+        <p class="p-meta">2023 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/wave-makers.jpg" alt="Wave Makers"
+           onerror="this.style.display='none'">
+      <div class="badge-corner"><span class="p-badge netflix">Netflix Original</span></div>
+      <div class="poster-overlay">
+        <p class="p-title">Wave Makers</p>
+        <p class="p-zh">人選之人—造浪者</p>
+        <p class="p-meta">2023 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/trouble-girl.jpg" alt="Trouble Girl"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Trouble Girl</p>
+        <p class="p-zh">小曉</p>
+        <p class="p-meta">2023 · Feature Film · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/here-comes-trouble.jpg" alt="Oh No! Here Comes Trouble"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Oh No! Here Comes Trouble</p>
+        <p class="p-zh">不良執念清除師</p>
+        <p class="p-meta">2023 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <!-- 2022 -->
+    <div class="poster-card">
+      <img src="images/untold-herstory.jpg" alt="Untold Herstory"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Untold Herstory</p>
+        <p class="p-zh">流麻溝十五號</p>
+        <p class="p-meta">2022 · Feature Film · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <div class="poster-card">
+      <img src="images/gold-leaf.jpg" alt="Gold Leaf"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Gold Leaf</p>
+        <p class="p-zh">茶金</p>
+        <p class="p-meta">2022 · TV Series · Title Sequence Director</p>
+      </div>
+    </div>
+
+    <!-- 2021 -->
+    <div class="poster-card">
+      <img src="images/tears-on-fire.jpg" alt="Tears on Fire"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">Tears on Fire</p>
+        <p class="p-zh">火神的眼淚</p>
+        <p class="p-meta">2021 · TV Series · VFX Supervisor</p>
+      </div>
+    </div>
+
+    <!-- 2020 -->
+
+    <!-- 2019 -->
+    <div class="poster-card">
+      <img src="images/we-are-champions.jpg" alt="We Are Champions"
+           onerror="this.style.display='none'">
+      <div class="poster-overlay">
+        <p class="p-title">We Are Champions</p>
+        <p class="p-zh">下半場</p>
+        <p class="p-meta">2019 · Feature Film · VFX Supervisor</p>
+      </div>
+    </div>
+
+
+  </div>
+</section>
+
+<!-- ── About ── -->
+<section id="about">
+  <div class="section-header">
+    <span class="section-title">About</span>
+    <div class="section-rule"></div>
+  </div>
+  <div class="about-grid">
+    <div class="about-bio">
+      <!--
+        ✏️ PLACEHOLDER BIO — update once director names are confirmed
+        Tu will confirm key collaborating directors for the final version
+      -->
+      <p>
+        Tu Wei Ting is one of Taiwan's most prolific VFX Supervisors, with over two decades of experience
+        spanning feature films, premium drama series, and international co-productions across
+        <strong>Taiwan, Singapore, Hong Kong, and Japan</strong>.
+        A two-time <strong>Golden Bell Award winner</strong> and multiple Golden Horse and Taipei Film Award nominee,
+        he is widely regarded as a defining voice in Taiwanese visual effects.
+      </p>
+      <p>
+        Recent credits include Netflix Originals <em>Wave Makers</em> (人選之人—造浪者) — for which he
+        received the <strong>58th Golden Bell Award for Best Visual Effects in Drama</strong> — and
+        <em>The Copycat Killer</em> (模倣犯), nominated for the 60th Golden Horse Award for Best Visual Effects.
+        His expanding regional footprint includes the Singapore co-production <em>See You at School at 11PM</em>.
+      </p>
+      <p>
+        In 2014, Tu founded <strong>Filmtailor Studio Co., Ltd.</strong> (沸騰映像股份有限公司),
+        which he continues to lead as studio head and hands-on VFX Supervisor. Under his leadership,
+        the studio has delivered visual effects for over <strong>30 productions</strong> across
+        major streaming platforms, theatrical releases, and broadcast television.
+      </p>
+      <p>
+        Prior to founding Filmtailor Studio, Tu served as VFX Supervisor at Chihe Digital Animation,
+        where he led the CG opening cinematic for <em>Final Fantasy XIII-2</em> — a high-profile
+        commission from Square Enix Japan — and as Post-Production and On-set VFX Supervisor
+        on the Hong Kong theatrical feature <em>Control</em> (控制).
+      </p>
+      <p>
+        An active practitioner and educator, Tu holds a concurrent appointment as
+        <strong>Assistant Professor at Shih Hsin University</strong>, where he teaches 3D production,
+        virtual production, and AI-driven filmmaking. He is a pioneer in integrating generative AI
+        into live VFX pipelines, operating a proprietary on-premises AI platform actively
+        deployed in production.
+      </p>
+    </div>
+    <div class="skills-block">
+      <div class="skill-row"><span class="skill-cat">3D & FX</span><span class="skill-val">Houdini · Maya · Blender · 3ds Max · Cinema 4D</span></div>
+      <div class="skill-row"><span class="skill-cat">Compositing</span><span class="skill-val">Nuke · DaVinci Resolve / Fusion · After Effects</span></div>
+      <div class="skill-row"><span class="skill-cat">Tracking</span><span class="skill-val">PFTrack · Mocha</span></div>
+      <div class="skill-row"><span class="skill-cat">Virtual Prod.</span><span class="skill-val">Unreal Engine · LED Volume · In-camera VFX</span></div>
+      <div class="skill-row"><span class="skill-cat">AI & Emerging</span><span class="skill-val">On-premises AI VFX platform (deployed) · Generative AI pipeline integration · Runway · ComfyUI</span></div>
+      <div class="skill-row"><span class="skill-cat">Languages</span><span class="skill-val">Mandarin Chinese (Native) · English (Professional)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Awards & Nominations ── -->
+<section id="awards">
+  <div class="section-header">
+    <span class="section-title">Awards &amp; Nominations</span>
+    <div class="section-rule"></div>
+  </div>
+  <div class="awards-list">
+
+    <div class="award-row">
+      <span class="award-year">2025</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects in Drama — 60th Golden Bell Awards</p>
+        <p class="award-detail">Golden Bell Awards (金鐘獎)</p>
+        <p class="award-film">Doctor Beyond the Boundary (化外之醫)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2025</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects — 27th Taipei Film Awards</p>
+        <p class="award-detail">Taipei Film Awards (台北電影獎)</p>
+        <p class="award-film">The March (進行曲)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2024</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects in Drama — 59th Golden Bell Awards</p>
+        <p class="award-detail">Golden Bell Awards (金鐘獎)</p>
+        <p class="award-film">PEAK HIGH (不良執念清除師)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2024</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects — 26th Taipei Film Awards</p>
+        <p class="award-detail">Taipei Film Awards (台北電影獎)</p>
+        <p class="award-film">Abby (小曉)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2023</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects — 60th Golden Horse Awards</p>
+        <p class="award-detail">Golden Horse Awards (金馬獎)</p>
+        <p class="award-film">The Copycat Killer (模倣犯)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2023</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects in Drama — 58th Golden Bell Awards</p>
+        <p class="award-detail">Golden Bell Awards (金鐘獎)</p>
+        <p class="award-film">Wave Makers (人選之人—造浪者)</p>
+      </div>
+      <span class="award-status win">Won</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2022</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects in Drama — 57th Golden Bell Awards</p>
+        <p class="award-detail">Golden Bell Awards (金鐘獎)</p>
+        <p class="award-film">Tears on Fire (火神的眼淚) / Gold Leaf (茶金)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2020</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects — 22nd Taipei Film Festival</p>
+        <p class="award-detail">Taipei Film Festival (台北電影節)</p>
+        <p class="award-film">Full Court (下半場)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2019</span>
+      <div class="award-body">
+        <p class="award-name">Best Visual Effects — 56th Golden Horse Awards</p>
+        <p class="award-detail">Golden Horse Awards (金馬獎)</p>
+        <p class="award-film">Full Court (下半場)</p>
+      </div>
+      <span class="award-status nom">Nominated</span>
+    </div>
+
+    <div class="award-row">
+      <span class="award-year">2018</span>
+      <div class="award-body">
+        <p class="award-name">Best Art Direction — 53rd Golden Bell Awards</p>
+        <p class="award-detail">Golden Bell Awards (金鐘獎)</p>
+        <p class="award-film">Anesthesia Storm 2 (麻醉風暴2)</p>
+      </div>
+      <span class="award-status win">Won</span>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ── Contact ── -->
+<section id="contact">
+  <p class="contact-label">Get in Touch</p>
+  <a class="contact-email" href="mailto:wells@filmtailor.com">wells@filmtailor.com</a>
+  <p class="contact-sub">Taipei, Taiwan · Available for regional productions</p>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <p>© 2025 Tu Wei Ting · Filmtailor Studio</p>
+  <p>VFX Supervisor · Taiwan</p>
+</footer>
+
+<script>
+  // ── Nav scroll ──
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => navbar.classList.toggle('scrolled', window.scrollY > 60));
+
+  // ══════════════════════════════════════
+  // ✏️ 填入你的 YouTube 影片
+  //    id    : YouTube 網址 ?v= 後面那串（留空則只顯示縮圖）
+  //    title : 縮圖上的標題
+  //    sub   : 副標說明
+  //    thumb : 自訂縮圖路徑；留空則自動抓 YouTube 封面
+  // ══════════════════════════════════════
+  const VIDEOS = [
+    {
+      id:    'KICHs_qU0m4',
+      title: 'CGI Creature',
+      sub:   'From feather dynamics to muscle simulation — crafting photoreal digital animals that hold up in close-up',
+      thumb: 'images/CGI-Creature.jpg'
+    },
+    {
+      id:    'q2B6cxqVVIk',
+      title: 'Character FX',
+      sub:   'Designing and compositing a full spectrum of magic and spell effects — elemental, arcane, and beyond — from concept to final frame',
+      thumb: 'images/CGI-Fx.jpg'
+    },
+    {
+      id:    'H-r4BiQIh4w',
+      title: 'Pyro & Destruction',
+      sub:   'Simulating large-scale fire, explosive smoke and shockwave destruction for sequences where real pyro is not an option',
+      thumb: 'images/CGI-Pyro.jpg'
+    },
+    {
+      id:    'tJ8BxTDA2WQ',
+      title: 'Digital Crowd',
+      sub:   'Building crowd scenes of thousands using an Asian avatar library developed specifically for Taiwanese productions',
+      thumb: 'images/Digital-Crowd.jpg'
+    },
+    {
+      id:    'd8sCejkEiNs',
+      title: 'AI-Driven Production',
+      sub:   'Integrating generative AI into live VFX pipelines — from concept visualization to final composite, accelerating every stage of production',
+      thumb: 'images/AI-Driven Production.jpeg'
+    },
+    {
+      id:    'h1_DZkHPdh0',
+      title: 'On-Premises AI Platform',
+      sub:   'A proprietary AI system built and deployed internally — full control over data routing, keeping client IP off public platforms while running inference at studio speed',
+      thumb: 'images/AI Platform.jpg'
+    },
+  ];
+
+  // ── Coverflow engine ──────────────────
+  const track   = document.getElementById('cfTrack');
+  const dotsWrap= document.getElementById('cfDots');
+  const outer   = document.getElementById('reel');
+
+  // Layout constants
+  const CARD_W_RATIO = 0.56;   // center card = 56% of viewport width
+  const STEP_RATIO   = 0.42;   // step between card centers = 42% of viewport
+  const SCALE_STEP   = 0.13;   // scale reduction per position away from center
+  const SCALE_MIN    = 0.62;
+  const OPACITY_STEP = 0.28;
+  const OPACITY_MIN  = 0.18;
+
+  let current = 0;
+  let cards   = [];
+  let dragStartX = 0, isDragging = false, dragDelta = 0;
+
+  function vw() { return document.documentElement.clientWidth; }
+
+  function cardWidth()  { return vw() * CARD_W_RATIO; }
+  function cardHeight() { return cardWidth() * 9 / 16; }
+  function stepPx()     { return vw() * STEP_RATIO; }
+
+  // Build cards
+  VIDEOS.forEach((v, i) => {
+    const thumb = v.thumb || `https://img.youtube.com/vi/${v.id}/maxresdefault.jpg`;
+    const card  = document.createElement('div');
+    card.className = 'cf-card';
+    card.id = `cf-card-${i}`;
+    card.innerHTML = `
+      <div class="cf-thumb" id="cf-thumb-${i}">
+        <img src="${thumb}" alt="${v.title}" loading="${i < 2 ? 'eager' : 'lazy'}">
+        <div class="cf-thumb-overlay"></div>
+        <div class="cf-play" id="cf-play-${i}" onclick="playVideo(${i})">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <div class="cf-thumb-info">
+          <p class="cf-thumb-label">VFX Breakdown</p>
+          <p class="cf-thumb-title">${v.title}</p>
+          <p class="cf-thumb-sub">${v.sub}</p>
+        </div>
+      </div>
+      <iframe class="cf-iframe" id="cf-iframe-${i}" src=""
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen></iframe>`;
+
+    // Click on non-active card → go to it
+    card.addEventListener('click', () => { if (i !== current) goTo(i); });
+    track.appendChild(card);
+    cards.push(card);
+
+    // Dot
+    const dot = document.createElement('div');
+    dot.className = 'cf-dot';
+    dot.onclick = () => goTo(i);
+    dotsWrap.appendChild(dot);
+  });
+
+  function layout(animated = true) {
+    const cw = cardWidth(), ch = cardHeight(), step = stepPx();
+    const N = VIDEOS.length;
+
+    // Set track height with vertical breathing room
+    track.style.height = (ch + 80) + 'px';
+
+    cards.forEach((card, i) => {
+      // Shortest-path offset for seamless infinite loop
+      let offset = i - current;
+      if (offset >  N / 2) offset -= N;
+      if (offset < -N / 2) offset += N;
+      const absOff = Math.abs(offset);
+      const scale   = Math.max(SCALE_MIN,   1 - absOff * SCALE_STEP);
+      const opacity = Math.max(OPACITY_MIN, 1 - absOff * OPACITY_STEP);
+      const x       = offset * step - cw / 2;
+      const y       = -ch / 2;
+      const shadow  = absOff === 0
+        ? '0 30px 80px rgba(0,0,0,0.9)'
+        : '0 10px 30px rgba(0,0,0,0.5)';
+
+      card.style.transition = animated
+        ? 'transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.45s ease, filter 0.45s ease, box-shadow 0.45s ease'
+        : 'none';
+      card.style.width      = cw + 'px';
+      card.style.transform  = `translate(${x}px, ${y}px) scale(${scale})`;
+      card.style.opacity    = opacity;
+      card.style.filter     = `brightness(${absOff === 0 ? 1 : 0.5 + (1 - absOff * 0.25) * 0.3})`;
+      card.style.zIndex     = 100 - absOff;
+      card.style.boxShadow  = shadow;
+      card.style.pointerEvents = absOff > 2 ? 'none' : 'auto';
+      card.classList.toggle('cf-active', i === current);
+    });
+
+    // Dots
+    document.querySelectorAll('.cf-dot').forEach((d, i) => d.classList.toggle('active', i === current));
+  }
+
+  function stopVideo(idx) {
+    const iframe = document.getElementById(`cf-iframe-${idx}`);
+    if (!iframe) return;
+    iframe.src = '';
+    iframe.classList.remove('playing');
+    document.getElementById(`cf-thumb-${idx}`).style.display = '';
+  }
+
+  function goTo(idx) {
+    stopVideo(current);
+    current = (idx + VIDEOS.length) % VIDEOS.length;
+    layout();
+  }
+
+  window.playVideo = function(idx) {
+    if (idx !== current) return;
+    const v      = VIDEOS[idx];
+    const iframe = document.getElementById(`cf-iframe-${idx}`);
+    const thumb  = document.getElementById(`cf-thumb-${idx}`);
+    iframe.src   = `https://www.youtube.com/embed/${v.id}?autoplay=1&rel=0&modestbranding=1`;
+    iframe.classList.add('playing');
+    thumb.style.display = 'none';
+  };
+
+  // Arrow buttons
+  document.getElementById('cfPrev').onclick = () => goTo(current - 1);
+  document.getElementById('cfNext').onclick = () => goTo(current + 1);
+
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft')  goTo(current - 1);
+    if (e.key === 'ArrowRight') goTo(current + 1);
+  });
+
+  // Mouse drag
+  outer.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragDelta = 0;
+    outer.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    dragDelta = e.clientX - dragStartX;
+  });
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    outer.classList.remove('dragging');
+    if (Math.abs(dragDelta) > 60) goTo(dragDelta < 0 ? current + 1 : current - 1);
+  });
+
+  // Touch swipe
+  outer.addEventListener('touchstart', e => {
+    dragStartX = e.touches[0].clientX; dragDelta = 0;
+  }, { passive: true });
+  outer.addEventListener('touchmove', e => {
+    dragDelta = e.touches[0].clientX - dragStartX;
+  }, { passive: true });
+  outer.addEventListener('touchend', () => {
+    if (Math.abs(dragDelta) > 50) goTo(dragDelta < 0 ? current + 1 : current - 1);
+  });
+
+  // Resize
+  window.addEventListener('resize', () => layout(false));
+
+  // Init
+  layout(false);
+</script>
+
+</body>
+</html>
